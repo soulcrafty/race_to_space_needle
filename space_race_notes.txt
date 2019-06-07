@@ -1,0 +1,65 @@
+webpack is a javascript module bundler. It allows us to eliminate running a <script> on the index html and manages a dependency graph through use of import statements at the top of ES6 modules. We need to define entry points to the file, we can include a simple <script> tag in the index.html to drop the bundled distribution file into something like 'main.js' Webpack is backwards compatible with older browsers that don't support javascript modules and thus has the ability to transpile the distribution code to support a wider set of browsers. 
+
+we use 'npx webpack' , which twill take our scipt at src/index.js as an entry point and will generate dist/main.js as the output. The 'npx' command runs the webpack binary ./node_modules/.bin/webpack of the webpack package we installed earlier.
+
+ - - 
+
+ switching two variables of an array in python : 
+ 
+ [[100, -200],[500, -800]] -> [[-200,100],[-800,500]]
+
+
+big_strava = route['strava_decoded_polyline']
+for i in big_strava: 
+	lst = list(i)
+	temp = lst[0]
+	lst[0] = lst[1]
+	lst[1] = temp
+	big_strava[big_strava.index(i)] = lst; 
+
+The concept of an Array in python is immutable, so we have to cast the array as a list. Then we can do a simple swap. 
+
+Interestling, we didn't need to cast big_strava as a list. Why??
+
+ - - 
+Discussion on how to get traffic conditions without the standard Google Maps Traffic overlay :
+
+Problem : 
+
+The Maps API will route you in two different directions based on the given traffic conditions and the road network, thus two api calls can result in two different sets of coordinates.
+
+If we want to compute a traffic indicator for a set of waypoints [[],[]] , we need a baseline travel time and a given travel time for which we are estimating traffic. We can get baseline traffic by just hitting the API at say, 3:00 in the mnorning on a Tuesday, where there's never any anticipated traffic. If we hit the API again at different time of day, 7am, 5pm, it might route us through a different set of waypoints. 
+
+Therefore, we need to write a function that computes whether or not the given set of corrdinates match the baseline no-traffic coordinates, and if they don't, do a separate API call for that section, even if it starts & ends in the middle of the highway we don't care, we just want travel time. 
+
+
+Google Maps API
+"Note* If departure time is not specified, choice of route and duration are based on road network and average time - independent traffic conditions. Results for a given request may vary over time due to changes in road network, updated traffic conditions, and the distributed nature of the service. Results may also vary between nearly equivalent routes at any time or frequency."
+
+-- 
+
+Lets consider two points, A & B, where A->B is the route from A to B and T(ab) is the trip time from A to B, D(ab) is the distance between A & B. The relationship between T(AB) and D(AB) is a linear one for all modes of transportation where no impedence exists. An impedence for cars can be traffic, an accident, road construction, etc. Impedences to cars are I(cars) and impedences to bicycles are I(bicycles). The primary impedence to a bicycle is elevation, which functions the same wasy as a traffic impedence to a car. IMpdedences that are not negatively correlated with time but will determine overall experience can be called Inconviences. Poor weather for bicycles, tools & operating expense of a vehicle for cars would be example of inconveniences. I believe measuring Inconvenience is outside the scope of this discussion, as we are trying to measure travel times among various transportation modes, and must therefore assume the choice of route & one mode vs the other have already been made. 
+
+-- 
+
+Problem : 
+
+We have 60+ routes each of which has a google decoded polyline array with between 0 and 300 elements. If we take the worst case, we need to call all 60 routes x 300 elements x 5 for base + morning/evening weekend/ weekday , that's 90,000 API calls to get granulated traffic data for all 60 routes. We're only allowed ~20,000 calls per month on a free plan that includes detailed traffic reports, so we obviously need to find a way to reduce the call count. 
+
+We can do this a few ways. 
+(1) Eliminate the redundant calls
+(2) Skip every other call 
+
+For point (1) 
+
+Say we have two sets the master set and the test set. we're testing the test set against the master for dupes. We can do this by filtering overlapping segments. We walk along the test set, and if there is an overlapping set for the given timeframe we know we have a match. But if the 'crow flies' distance between the waypoints in the test set is larger than the overlapping set, then we must use the test set traffic data which will require an api call. If the test waypoint distance is equal to or less than the wdistance of the waypoints in the master set set, we can simply use the traffic data from the master set.  
+
+(2) self explanatory, we don't need 300 lines of gradient traffic data for this vis, kind of overkill. 
+
+
+--
+terminal commands
+npm install webpack --save-dev : installs webpack, a javascript module bundler
+npm init -y : creates a package json
+npm install webpack-cli --save-dev
+

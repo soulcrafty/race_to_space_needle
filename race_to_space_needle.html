@@ -1,0 +1,455 @@
+<html>
+  <head>
+    <meta charset="UTF-8">
+
+    <script src="https://unpkg.com/deck.gl@7.0.0/dist.min.js"></script>
+    <script src="node_modules/chart.js/dist/Chart.min.js"></script>
+    <script src="https://npmcdn.com/@turf/turf/turf.min.js"></script>
+    <script src="node_modules/jquery/dist/jquery.min.js"></script>
+    <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v0.53.0/mapbox-gl.js'></script>
+    <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.53.0/mapbox-gl.css' rel='stylesheet' />
+
+    <style type="text/css">
+
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      #container {
+        width: 100vw;
+        height: 100vh;
+      }
+      #tooltip:empty {
+      display: none;
+      }
+      #tooltip {
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 11px;
+      position: absolute;
+      padding: 4px;
+      margin: 8px;
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      max-width: 300px;
+      font-size: 11px;
+      z-index: 9;
+      pointer-events: none;
+      }
+      #control-panel {
+      font-family: Helvetica, Arial, sans-serif;
+      position: absolute;
+      background: #fff;
+      top: 0;
+      left: 0;
+      margin: 12px;
+      padding: 20px;
+      z-index: 1;
+    }
+      label {
+      display: inline-block;
+      width: 140px;
+    }
+
+    </style>
+  </head>
+
+  <body>
+      <div id="control-panel">
+      <div>
+          <div style="font-family: Verdana, Geneva, sans-serif; font-size:12px">
+            <h3> Race to the Space Needle!</h3>
+            <div>This map combines data from Google Maps and Strava</div>
+            <div>to determine the optimal path for travel by car</div>
+            <div>or by bicycle for several points originating</div>
+            <div>in the greater Seattle area and ending at the</div>
+            <div>Space Needle</div>
+            <p></p>
+            <div>Brief observations</div>
+                <div>1 - Cyclists and cars travel widely divergent paths</div>
+                <div>2 - Under ~6 miles bikes are equal or faster than cars</div>
+                <div>3 - The feasibility of commuting 10-15 miles increases </div>
+                         dramatically if using an e-bike (faster, physically easier)</div> 
+          <p></p>
+          </div>
+          <canvas id="scatterChart" width="275" height="275"></canvas>
+      </div>
+    </div>
+        <div id="container"></div>
+        <div id="tooltip" style="position: absolute; z-index: 1; pointer-events: none;"></div>
+  </body>
+
+
+  <script type="text/javascript">
+
+
+    $.getJSON( "./py_scripts/stravagoog_route_data.json", function(py_data){
+      init_model(py_data)     
+    });
+
+    // $.ajax({
+    //   url: "./py_scripts/stravagoog_route_data.json",
+    //   dataType: "json",
+    //   success: function(py_data) {
+    //     init_model(py_data);
+    //   }
+    // });
+
+
+    function setGeoPrecision(data) {
+      // data is [-123.45, 44.25]
+      let lossy_data = [
+        parseFloat(data[0].toPrecision(6)),
+        parseFloat(data[1].toPrecision(5))
+      ];
+      return lossy_data;
+    }
+
+    function setTraffic(py_data) {
+    //returns all unique waypoints without overlapping assuming precision params set in setGeoPrecision function
+
+    let traffic_arr = [];
+
+    for (let i = 0; i < py_data.length; i++) {
+      let decoded_arr = py_data[i]["google_decoded_polyline"];
+      let n = 0;
+      let j = 1;
+      let overlap_bool = false;
+
+      traffic_element = [];
+
+      if (i == 0) {
+        decoded_arr.forEach(e => {
+          traffic_element.push(setGeoPrecision(e));
+        });
+        traffic_arr.push(traffic_element);
+      } else {
+        while (j < decoded_arr.length && overlap_bool == false) {
+          for (let t = 0; t < traffic_arr.length; t++) {
+            let search_arr = turf.lineString(traffic_arr[t]);
+            let key_arr = turf.lineString([
+              setGeoPrecision(decoded_arr[n]),
+              setGeoPrecision(decoded_arr[j])
+            ]);
+            let overlap = turf.lineOverlap(key_arr, search_arr);
+            if (overlap["features"].length == 0) {
+              traffic_element.push(
+                setGeoPrecision(decoded_arr[n]),
+                setGeoPrecision(decoded_arr[j])
+              );
+              n++;
+              j++;
+              break;
+            } else {
+              overlap_bool = true;
+            }
+          }
+        }
+
+        let clean_coords = turf.cleanCoords(turf.multiPoint(traffic_element))
+          .geometry.coordinates;
+        traffic_arr.push(clean_coords);
+      }
+    }
+    return traffic_arr;
+  }
+
+    function count_calls(traffic) {
+    let total = 0;
+    let arr = traffic;
+    for (let i = 0; i < arr.length; i++) {
+      total = total + arr[i].length;
+    }
+    return total;
+  }
+
+  function count_og(py_data) {
+    let total = 0;
+    let arr = py_data;
+    for (let i = 0; i < arr.length; i++) {
+      total = total + arr[i]["google_decoded_polyline"].length;
+    }
+    return total;
+  }
+
+  function convertGeoJson(data) {
+    let arr = [];
+    for (let i = 0; i < data.length; i++) {
+      let ls = turf.lineString(data[i]);
+      arr.push(ls);
+    }
+
+    return turf.featureCollection(arr);
+  }
+function init_graph(graph_data){
+
+var ctx = document.getElementById('scatterChart').getContext('2d');
+var scatterChart = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+        labels: ['Red'],
+        datasets: [{
+            label: 'Cars',
+            data: graph_data[0][0],
+            backgroundColor: 
+                'rgba(77, 255, 195, 0.2)'
+            ,
+            borderColor: 
+                'rgba(77, 255, 195, 1)'
+            ,
+            borderWidth: 1
+        }, 
+        {
+            label: 'Bicycles',
+            data: graph_data[1][0],
+            backgroundColor: 
+                'rgba(13, 212, 247, 0.2)',
+            borderColor: 
+                'rgba(13, 212, 247, 1)',
+            borderWidth: 1
+        }
+
+        ]
+    },
+    options: {
+        scales: {
+            xAxes: [{
+                type: 'linear',
+                position: 'bottom',
+                 scaleLabel: {
+                    display: true,
+                    labelString: 'Distance (mi)'
+                }
+            }],
+            yAxes: [{
+                type: 'linear',
+                position: 'bottom',
+                 scaleLabel: {
+                    display: true,
+                    labelString: 'Time (min)'
+                }
+            }]
+        }
+    }
+});
+}
+
+
+function init_model(py_data) {
+
+  let path_data = [];
+  let text_data = [];
+  let traffic_data = setTraffic(py_data);
+  let geo_json_data = convertGeoJson(traffic_data);
+  let ICON_MAPPING = {
+    marker: { x: 0, y: 0, width: 280, height: 280, mask: true }
+  };
+
+
+  for (let i = 0; i < py_data.length; i++) {
+    let obj = {
+      name: py_data[i]["name"] + "_BICYCLE",
+      path: py_data[i].strava_decoded_polyline,
+      color: [13, 212, 247],
+      distance: py_data[i]["distance"],
+      elevation_gain: py_data[i]["elevation_gain"],
+      estimated_moving_time: py_data[i]["estimated_moving_time"]
+    };
+    path_data.push(obj);
+  }
+
+  for (let i = 0; i < py_data.length; i++) {
+
+    let obj = {
+      name: py_data[i]["name"] + "_CAR",
+      path: py_data[i]["google_decoded_polyline"],
+      color: [77, 255, 195],
+      distance:
+        py_data[i]["google_traffic_data"][0]["routes"][0]["legs"][0][
+          "distance"
+        ]["value"],
+      duration:
+        py_data[i]["google_traffic_data"][0]["routes"][0]["legs"][0][
+          "duration"
+        ]["value"],
+      duration_traffic:
+        py_data[i]["google_traffic_data"][0]["routes"][0]["legs"][0][
+          "duration_in_traffic"
+        ]["value"]
+    };
+
+    path_data.push(obj);
+  }
+
+  for (let i = 0; i < py_data.length; i++) {
+    
+    let obj = {
+      name: py_data[i]["name"],
+      coordinates: py_data[i]["strava_decoded_polyline"][0],
+      car_travel_time: parseFloat(
+        (
+          py_data[i]["google_traffic_data"][0]["routes"][0]["legs"][0][
+            "duration"
+          ]["value"] / 60
+        ).toPrecision(4)
+      ),
+      car_travel_time_traffic: parseFloat(
+        (
+          py_data[i]["google_traffic_data"][0]["routes"][0]["legs"][0][
+            "duration_in_traffic"
+          ]["value"] / 60
+        ).toPrecision(4)
+      ),
+
+      car_travel_distance: parseFloat(
+        (
+          py_data[i]["google_traffic_data"][0]["routes"][0]["legs"][0][
+            "distance"
+          ]["value"] * 0.000621371
+        ).toPrecision(4)
+      ),
+      bicycle_travel_time: parseFloat(
+        (py_data[i]["estimated_moving_time"] / 60).toPrecision(3)
+      ),
+      bicycle_travel_distance: parseFloat(
+        (py_data[i]["distance"] * 0.000621371).toPrecision(3)
+      ),
+      exits: 4214
+    };
+
+    text_data.push(obj);
+  }
+
+  let car_data = [];
+  let bike_data = [];
+  text_data.forEach((e)=>{
+    let car_obj = {
+      x : e.car_travel_distance,
+      y : e.car_travel_time_traffic
+    }
+    let bike_obj = {
+        x : e.bicycle_travel_distance,
+        y : e.bicycle_travel_time
+    }
+  car_data.push(car_obj);
+  bike_data.push(bike_obj);
+})
+
+let graph_data=[[car_data],[bike_data]];
+init_graph(graph_data);
+  const layers = [
+
+    new PathLayer({
+      id: "path-layer",
+      data: path_data,
+      pickable: true,
+      autoHighlight: true,
+      opacity: .7,
+      widthScale: 0,
+      widthMinPixels: 3,
+      rounded: true,
+      getPath: d => d.path,
+      getColor: d => d.color,
+      getWidth: d => 8
+    }),
+    new IconLayer({
+       id: 'icon-layer',
+       data: text_data,
+       autoHighlight : true,
+       pickable: true,
+       billboard : false,
+       iconAtlas: 'images/start_marker.png',
+       iconMapping: ICON_MAPPING,
+       getIcon: d => 'marker',
+       sizeScale: 6,
+       getColor: d => [13,212,247],
+       getPosition: d => d.coordinates,
+       getSize: d => 3,
+       onHover: info => setTooltip(info.object, info.x, info.y),
+       onClick: info => console.log('scatterplot layer clicked', info.object)
+     }),
+    // new GeoJsonLayer({
+    //    id: "geojsonstrava",
+    //    data: geo_json_data,
+    //    pickable: true,
+    //    autoHighlight : true,
+    //    opacity: 1,
+    //    stroked: false,
+    //    filled: false,
+    //    lineWidthMinPixels: 1,
+    //    lineWidthScale : 3,
+    //    parameters: {
+    //      depthTest: false
+    //    },
+    //    getLineColor: [55, 231, 153],
+    //    getLineWidth: 2,
+    //    pickable: true,
+    //    transitions: {
+    //      getLineColor: 1000,
+    //      getLineWidth: 1000
+    //    }
+    //  })
+  ];
+
+  //Strava API : Distance in Meters , time in Seconds
+
+  function setTooltip(object, x, y) {
+    const el = document.getElementById("tooltip");
+    if (object) {
+      el.innerHTML =
+        "<div><b>" +
+        object.name +
+        "</b></div>" +
+        "<p></p>" +
+        "<div><b>Bike</b></div>" +
+        "<div>" +
+        "Distance : " +
+        object.bicycle_travel_distance +
+        " mi" +
+        "</div>" +
+        "<div>" +
+        "Time : " +
+        object.bicycle_travel_time +
+        " min" +
+        " </div>" +
+        "<p></p>" +
+        "<div><b>Drive</b></div>" +
+        "<div>" +
+        "Distance : " +
+        object.car_travel_distance +
+        " mi" +
+        "</div>" +
+        "<div>" +
+        "Time : " +
+        object.car_travel_time +
+        " min" +
+        "</div>" +
+        "<div>" +
+        "Time w Traffic : " +
+        object.car_travel_time_traffic +
+        " min" +
+        "</div>";
+
+      el.style.display = "block";
+      el.style.left = x + "px";
+      el.style.top = y + "px";
+    } else {
+      el.style.display = "none";
+    }
+  }
+
+  new deck.DeckGL({
+    container: "container",
+    mapboxApiAccessToken:
+      "pk.eyJ1IjoiZGFkdW5hIiwiYSI6ImNqdzlzc284YzAybmE0YW9hbDFoem5hZHkifQ.RmcDpfUl50SWhuippua3Sw",
+    mapStyle: "mapbox://styles/mapbox/dark-v9",
+    longitude: -122.34,
+    latitude: 47.62,
+    zoom: 12,
+    pitch: 40.5,
+    layers: layers
+  });
+
+}
+
+  </script>
+</html>
