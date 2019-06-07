@@ -12,12 +12,12 @@ import json
 #google directions api call
 # "https://maps.googleapis.com/maps/api/directions/json?origin= " + origin_coordinates +  "&destination="+ destination_coordinates + "&key=AIzaSyBJ1VnvYHG4YqemW5W2XouFtDYtO_0Qc3s";
 
-
 #google call directions departure time
 #https://maps.googleapis.com/maps/api/directons/json?origin=Brooklyn&destination=Queens&departure_time=1343641500&mode=transit&key=YOUR_API_KEY
 #times must be given in integer form, which is seconds since midnight, January 1st, 1970 UTC . You can also use a value of "now" but value must be current time or in the future
-STRAVA_ACCESS_TOKEN = 'd1a1599a2ba3335e3108179763d50f0652b20849'
-GOOGLE_MAPS_ACCESS_TOKEN = 'AIzaSyBJ1VnvYHG4YqemW5W2XouFtDYtO_0Qc3s'
+
+STRAVA_ACCESS_TOKEN = 'YOUR_STRAVA_TOKEN'
+GOOGLE_MAPS_ACCESS_TOKEN = 'YOUR_GOOGLE_MAPS_TOKEN'
 
 STRAVA_BASE_URL = 'https://www.strava.com/api/v3/'
 STRAVA_URL_ATHLETES = 'athletes/'
